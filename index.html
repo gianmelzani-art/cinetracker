@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CineTracker</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- SheetJS per esportazione Excel (.xlsx) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <style>
+        /* --- RIMOZIONE FORZATA BADGE NETLIFY INIETTATO --- */
+        iframe#netlify-identity-widget,
+        .netlify-identity-menu,
+        a[href*="netlify.com"],
+        div:has(> a[href*="netlify.com"]),
+        a[aria-label*="Deploys by Netlify"],
+        [id*="netlify"],
+        [class*="netlify"],
+        [data-netlify-deploy-id],
+        netlify-plugin-drawer,
+        div[style*="z-index: 2147483647"],
+        div[style*="position: fixed"][style*="bottom"] {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            height: 0 !important;
+            width: 0 !important;
+            z-index: -99999 !important;
+        }
+
+        body {
+            background-color: #0b0f19;
+            color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            transition: all 0.5s ease;
+            -webkit-tap-highlight-color: transparent;
+            overflow-x: hidden;
+        }
+
+        /* --- STILI EFFETTI WOW (10 EASTER EGG) --- */
+        #fxCanvas {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            z-index: 1; pointer-events: none; opacity: 0.6;
+        }
+
+        .mode-cyberpunk {
+            background-color: #0d0221 !important;
+            box-shadow: inset 0 0 120px #ff007f;
+            filter: contrast(1.1);
+        }
+
+        @keyframes spotlight {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .mode-cinema {
+            background: linear-gradient(270deg, #3b0000, #0b0f19, #3b0000) !important;
+            background-size: 400% 400% !important;
+            animation: spotlight 8s ease infinite !important;
+        }
+
+        .starwars-crawl { perspective: 300px; overflow: hidden; }
+        .starwars-text { transform: rotateX(25deg); animation: crawl 12s linear infinite; }
+        @keyframes crawl {
+            0% { transform: rotateX(20deg) translateY(100%); }
+            100% { transform: rotateX(25deg) translateY(-100%); }
+        }
+
+        @keyframes horrorPulse {
+            0% { background-color: #0b0f19; }
+            50% { background-color: #450a0a; }
+            100% { background-color: #0b0f19; }
+        }
+        .mode-horror { animation: horrorPulse 2s infinite !important; }
+
+        .mode-retro {
+            background-color: #051405 !important;
+            color: #33ff33 !important;
+            font-family: monospace !important;
+        }
+        .mode-retro::before {
+            content: " "; display: block; position: fixed;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+            background-size: 100% 4px; z-index: 50; pointer-events: none;
+        }
+
+        .mode-golden { background: linear-gradient(135deg, #1f1902, #3d3100, #0b0f19) !important; border-color: #eab308 !important; }
+        .mode-anime { background: radial-gradient(circle, #831843 0%, #0b0f19 100%) !important; }
+
+        @keyframes rainbow {
+            0% { filter: hue-rotate(0deg); }
+            100% { filter: hue-rotate(360deg); }
+        }
+        .mode-konami { animation: rainbow 2s linear infinite !important; }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col pb-56 custom-scrollbar" id="mainBody">
+
+    <!-- Canvas globale per effetti visivi avanzati -->
+    <canvas id="fxCanvas" class="hidden"></canvas>
+
+    <!-- Header Superiore -->
+    <header class="px-4 py-4 flex justify-between items-center bg-[#0b0f19]/90 backdrop-blur-md sticky top-0 z-40 border-b border-slate-800/50">
+        <h1 class="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+            <span>CineTracker</span>
+            <span id="modeBadge" class="hidden text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded-full font-mono uppercase"></span>
+        </h1>
+        <div class="flex items-center gap-2">
+            <button onclick="exportToExcel()" class="bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-lg shadow-emerald-600/20 transition" title="Esporta in file Excel">
+                <i class="fa-solid fa-file-excel text-sm"></i>
+                <span class="hidden sm:inline">Esporta Excel</span>
+            </button>
+            <button onclick="syncData()" class="bg-slate-800 active:bg-slate-700 text-slate-300 px-2.5 py-1.5 rounded-xl text-xs border border-slate-700/50">
+                <i class="fa-solid fa-rotate"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow px-4 flex flex-col gap-4 max-w-md mx-auto w-full z-10 pt-4" id="mainContainer">
+        
+        <!-- Barra di Ricerca -->
+        <div class="relative w-full">
+            <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3 text-slate-500 text-xs"></i>
+            <input type="text" id="searchInput" oninput="filterWatchlist()" placeholder="Cerca o digita: matrix, cyberpunk, starwars, popcorn..." 
+                class="w-full bg-slate-900/90 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 shadow-inner">
+        </div>
+
+        <!-- Statistiche -->
+        <div class="grid grid-cols-2 gap-3">
+            <div class="bg-slate-900/80 border border-slate-800/80 rounded-2xl p-3 flex items-center gap-3 shadow-sm">
+                <div class="bg-emerald-500/10 text-emerald-400 p-2.5 rounded-xl">
+                    <i class="fa-solid fa-tv text-sm"></i>
+                </div>
+                <div>
+                    <p class="text-[10px] uppercase font-bold text-slate-400">Serie Completate</p>
+                    <p id="statCompletedSeries" class="text-base font-extrabold text-white">0</p>
+                </div>
+            </div>
+            <div class="bg-slate-900/80 border border-slate-800/80 rounded-2xl p-3 flex items-center gap-3 shadow-sm">
+                <div class="bg-indigo-500/10 text-indigo-400 p-2.5 rounded-xl">
+                    <i class="fa-solid fa-film text-sm"></i>
+                </div>
+                <div>
+                    <p class="text-[10px] uppercase font-bold text-slate-400">Film Completati</p>
+                    <p id="statCompletedMovies" class="text-base font-extrabold text-white">0</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filtri -->
+        <div class="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+            <button onclick="setStatusFilter('Tutti', this)" class="filter-pill px-4 py-2 rounded-full text-xs font-medium whitespace-nowrap bg-indigo-600 text-white shadow-md transition">Tutti</button>
+            <button onclick="setStatusFilter('In corso', this)" class="filter-pill px-4 py-2 rounded-full text-xs font-medium whitespace-nowrap bg-slate-900 text-slate-300 border border-slate-800 hover:bg-slate-800 transition">In Corso</button>
+            <button onclick="setStatusFilter('Completati', this)" class="filter-pill px-4 py-2 rounded-full text-xs font-medium whitespace-nowrap bg-slate-900 text-slate-300 border border-slate-800 hover:bg-slate-800 transition">Completati</button>
+            <button onclick="setStatusFilter('Da guardare', this)" class="filter-pill px-4 py-2 rounded-full text-xs font-medium whitespace-nowrap bg-slate-900 text-slate-300 border border-slate-800 hover:bg-slate-800 transition">Da Guardare</button>
+        </div>
+
+        <!-- Griglia -->
+        <div id="watchlistGrid" class="grid grid-cols-2 gap-4 pb-28"></div>
+    </main>
+
+    <!-- Navigazione Inferiore -->
+    <nav class="fixed bottom-6 left-4 right-4 bg-[#0b0f19]/95 backdrop-blur-md border border-slate-800 px-6 py-3 flex justify-around items-center z-50 max-w-sm mx-auto rounded-2xl shadow-2xl">
+        <button onclick="filterWatchlist()" class="flex flex-col items-center gap-1 text-indigo-400">
+            <i class="fa-solid fa-house text-base"></i>
+            <span class="text-[10px] font-medium">Libreria</span>
+        </button>
+        <button onclick="openAddModal()" class="flex flex-col items-center gap-1 text-slate-400 hover:text-white transition">
+            <div class="bg-indigo-600 text-white w-9 h-9 rounded-full flex items-center justify-center shadow-lg shadow-indigo-600/30 -mt-2">
+                <i class="fa-solid fa-plus text-sm"></i>
+            </div>
+            <span class="text-[10px] font-medium">Aggiungi</span>
+        </button>
+        <button onclick="exportToExcel()" class="flex flex-col items-center gap-1 text-emerald-400 hover:text-emerald-300">
+            <i class="fa-solid fa-file-excel text-base"></i>
+            <span class="text-[10px] font-medium">Excel</span>
+        </button>
+    </nav>
+
+    <!-- Modal Aggiungi / Modifica -->
+    <div id="itemModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-end sm:items-center justify-center sm:p-4 pb-24">
+        <div class="bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-2xl max-w-md w-full p-6 shadow-2xl relative max-h-[75vh] overflow-y-auto mb-16">
+            <h3 id="modalTitle" class="text-lg font-bold text-white mb-4">Aggiungi titolo</h3>
+            
+            <form id="itemForm" onsubmit="saveItem(event)" class="space-y-3">
+                <input type="hidden" id="itemId">
+                
+                <div>
+                    <label class="block text-[10px] font-semibold text-slate-400 uppercase mb-1">Titolo</label>
+                    <input type="text" id="formTitle" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500" placeholder="Es. Lupin">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-[10px] font-semibold text-slate-400 uppercase mb-1">Tipo</label>
+                        <select id="formType" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500">
+                            <option value="serie">Serie TV</option>
+                            <option value="film">Film</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-semibold text-slate-400 uppercase mb-1">Stato</label>
+                        <select id="formStatus" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500">
+                            <option value="Da guardare">Da guardare</option>
+                            <option value="In corso">In corso</option>
+                            <option value="Completata">Completata</option>
+                            <option value="Abbandonato">Abbandonato</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-[10px] font-semibold text-slate-400 uppercase mb-1">Episodi Visti</label>
+                        <input type="number" id="formCurrentEp" min="0" value="0" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-semibold text-slate-400 uppercase mb-1">Episodi Totali</label>
+                        <input type="number" id="formTotalEp" min="0" value="1" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500">
+                    </div>
+                </div>
+
+                <!-- CARICAMENTO IMMAGINE DA GALLERIA -->
+                <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2">
+                    <label class="block text-[10px] font-semibold text-indigo-400 uppercase">Immagine di Anteprima</label>
+                    <div class="flex items-center gap-2">
+                        <label class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-2 rounded-xl text-xs font-medium cursor-pointer transition flex items-center gap-1.5 border border-slate-700 shrink-0">
+                            <i class="fa-solid fa-image text-indigo-400"></i> Scegli da Galleria
+                            <input type="file" id="formGalleryImage" accept="image/*" onchange="handleImageUpload(event)" class="hidden">
+                        </label>
+                        <span id="galleryStatus" class="text-[10px] text-slate-400 truncate">Nessun file selezionato</span>
+                    </div>
+                    <input type="hidden" id="formCustomImage">
+                </div>
+
+                <div>
+                    <label class="block text-[10px] font-semibold text-slate-400 uppercase mb-1">Piattaforma / Note</label>
+                    <input type="text" id="formNotes" placeholder="Netflix..." class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500">
+                </div>
+
+                <div class="flex justify-end gap-2 pt-3 border-t border-slate-800 pb-8">
+                    <button type="button" onclick="closeModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-xl text-xs font-medium">Annulla</button>
+                    <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-xs font-medium">Salva</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script>
+        // Sterminatore automatico di qualsiasi element aggiunto da Netlify
+        const purgeNetlifyBadge = () => {
+            const elements = document.querySelectorAll('a[href*="netlify"], div:has(> a[href*="netlify"]), [class*="netlify"], [id*="netlify"], netlify-plugin-drawer');
+            elements.forEach(el => el.remove());
+        };
+        const observer = new MutationObserver(purgeNetlifyBadge);
+        observer.observe(document.body, { childList: true, subtree: true });
+
+        let watchlist = [
+            {"id": 1, "title": "The Sandman", "type": "serie", "status": "Completata", "currentEp": 23, "totalEp": 23, "genre": "2 Stagioni", "rating": 9, "notes": "Netflix"},
+            {"id": 4, "title": "The Boys", "type": "serie", "status": "Completata", "currentEp": 40, "totalEp": 40, "genre": "5 Stagioni", "rating": 9.5, "notes": "Prime Video"},
+            {"id": 6, "title": "Stranger Things", "type": "serie", "status": "Completata", "currentEp": 42, "totalEp": 42, "genre": "5 Stagioni", "rating": 9, "notes": "Netflix"},
+            {"id": 18, "title": "The Gilded Age", "type": "serie", "status": "In corso", "currentEp": 25, "totalEp": 33, "genre": "4 Stagioni", "rating": 8, "notes": "Sky, NOW"},
+            {"id": 127, "title": "Dark", "type": "serie", "status": "Completata", "currentEp": 26, "totalEp": 26, "genre": "3 Stagioni", "rating": 10, "notes": "Netflix"}
+        ];
+
+        let currentStatusFilter = 'Tutti';
+        let fxInterval = null;
+
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            const statusLabel = document.getElementById('galleryStatus');
+            const hiddenInput = document.getElementById('formCustomImage');
+
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    hiddenInput.value = e.target.result;
+                    statusLabel.innerText = "Immagine caricata!";
+                    statusLabel.className = "text-[10px] text-emerald-400 font-semibold truncate";
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function exportToExcel() {
+            const excelData = watchlist.map(item => ({
+                "Titolo": item.title,
+                "Tipo": item.type.toUpperCase(),
+                "Stato": item.status,
+                "Episodi Visti": item.currentEp,
+                "Episodi Totali": item.totalEp,
+                "Avanzamento %": item.totalEp > 0 ? Math.round((item.currentEp / item.totalEp) * 100) + "%" : "100%",
+                "Valutazione": item.rating > 0 ? item.rating + "/10" : "N/D",
+                "Note / Piattaforma": item.notes || ""
+            }));
+
+            const worksheet = XLSX.utils.json_to_sheet(excelData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Libreria");
+            XLSX.writeFile(workbook, "CineTracker_Watchlist.xlsx");
+        }
+
+        function filterWatchlist() {
+            const query = document.getElementById('searchInput').value.toLowerCase().trim();
+            const body = document.body;
+            const canvas = document.getElementById('fxCanvas');
+            const badge = document.getElementById('modeBadge');
+            const container = document.getElementById('mainContainer');
+
+            body.className = "min-h-screen flex flex-col pb-56 custom-scrollbar";
+            container.className = "flex-grow px-4 flex flex-col gap-4 max-w-md mx-auto w-full z-10 pt-4";
+            canvas.classList.add('hidden');
+            if (fxInterval) clearInterval(fxInterval);
+            badge.classList.add('hidden');
+
+            if (query === 'matrix') {
+                activateMode(badge, canvas, "MATRIX CODE", () => startMatrixRain());
+            } else if (query === 'cyberpunk') {
+                activateMode(badge, null, "CYBERPUNK GLITCH", () => body.classList.add('mode-cyberpunk'));
+            } else if (query === 'cinema') {
+                activateMode(badge, null, "CINEMA SPOTLIGHT", () => body.classList.add('mode-cinema'));
+            } else if (query === 'starwars') {
+                activateMode(badge, canvas, "STAR WARS CRAWL", () => {
+                    container.classList.add('starwars-crawl', 'starwars-text');
+                    startStarfield();
+                });
+            } else if (query === 'horror') {
+                activateMode(badge, null, "HORROR BLOOD", () => body.classList.add('mode-horror'));
+            } else if (query === 'retro') {
+                activateMode(badge, null, "CRT RETRO ARCADE", () => body.classList.add('mode-retro'));
+            } else if (query === 'golden') {
+                activateMode(badge, canvas, "GOLD LUXURY", () => {
+                    body.classList.add('mode-golden');
+                    startGoldParticles();
+                });
+            } else if (query === 'anime') {
+                activateMode(badge, null, "HYPER ANIME", () => body.classList.add('mode-anime'));
+            } else if (query === 'popcorn') {
+                activateMode(badge, canvas, "POPCORN RAIN 🍿", () => startPopcornRain());
+            } else if (query === 'konami') {
+                activateMode(badge, null, "RAINBOW KONAMI", () => body.classList.add('mode-konami'));
+            }
+
+            const filtered = watchlist.filter(item => {
+                const matchesQuery = item.title.toLowerCase().includes(query);
+                const isCompleted = item.status.includes('Completat');
+                let matchesStatus = true;
+                if (currentStatusFilter === 'Completati') matchesStatus = isCompleted;
+                else if (currentStatusFilter === 'In corso') matchesStatus = item.status === 'In corso';
+                else if (currentStatusFilter === 'Da guardare') matchesStatus = item.status === 'Da guardare';
+                return matchesQuery && matchesStatus;
+            });
+
+            renderWatchlist(filtered);
+        }
+
+        function activateMode(badge, canvas, title, callback) {
+            badge.innerText = title;
+            badge.classList.remove('hidden');
+            if (canvas) canvas.classList.remove('hidden');
+            callback();
+        }
+
+        function startMatrixRain() {
+            const canvas = document.getElementById('fxCanvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+            const chars = '011010101001001010010010101CINETRACKER';
+            const drops = Array(Math.floor(canvas.width / 14)).fill(1);
+
+            fxInterval = setInterval(() => {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#0f0';
+                ctx.font = '14px monospace';
+                drops.forEach((y, i) => {
+                    ctx.fillText(chars[Math.floor(Math.random() * chars.length)], i * 14, y * 14);
+                    if (y * 14 > canvas.height && Math.random() > 0.975) drops[i] = 0;
+                    drops[i]++;
+                });
+            }, 33);
+        }
+
+        function startPopcornRain() {
+            const canvas = document.getElementById('fxCanvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+            const items = Array.from({length: 40}, () => ({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                s: Math.random() * 2 + 1
+            }));
+
+            fxInterval = setInterval(() => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.font = '24px sans-serif';
+                items.forEach(p => {
+                    ctx.fillText('🍿', p.x, p.y);
+                    p.y += p.s;
+                    if (p.y > canvas.height) p.y = -20;
+                });
+            }, 30);
+        }
+
+        function startStarfield() {
+            const canvas = document.getElementById('fxCanvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+            const stars = Array.from({length: 100}, () => ({ x: Math.random() * canvas.width, y: Math.random() * canvas.height, z: Math.random() * 2 }));
+
+            fxInterval = setInterval(() => {
+                ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#fff';
+                stars.forEach(s => {
+                    ctx.fillRect(s.x, s.y, s.z, s.z);
+                    s.y += s.z * 0.5;
+                    if (s.y > canvas.height) s.y = 0;
+                });
+            }, 30);
+        }
+
+        function startGoldParticles() {
+            const canvas = document.getElementById('fxCanvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+            const particles = Array.from({length: 50}, () => ({ x: Math.random() * canvas.width, y: Math.random() * canvas.height, r: Math.random() * 3 }));
+
+            fxInterval = setInterval(() => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#eab308';
+                particles.forEach(p => {
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                    ctx.fill();
+                    p.y -= 0.5;
+                    if (p.y < 0) p.y = canvas.height;
+                });
+            }, 30);
+        }
+
+        function renderWatchlist(items) {
+            const grid = document.getElementById('watchlistGrid');
+            grid.innerHTML = '';
+
+            items.forEach(item => {
+                const card = document.createElement('div');
+                card.className = "bg-slate-900/90 border border-slate-800/80 rounded-2xl overflow-hidden flex flex-col justify-between shadow-lg relative";
+
+                const imgSrc = item.customImage || `https://via.placeholder.com/300x200/1e293b/ffffff?text=${encodeURIComponent(item.title)}`;
+
+                card.innerHTML = `
+                    <div class="h-32 bg-slate-950 relative overflow-hidden flex items-center justify-center">
+                        <img src="${imgSrc}" class="w-full h-full object-cover" alt="${item.title}">
+                        <span class="absolute top-2 right-2 text-[9px] uppercase font-bold px-2 py-0.5 rounded-full border backdrop-blur-md bg-slate-800/80 text-slate-300">
+                            ${item.status}
+                        </span>
+                    </div>
+                    <div class="p-3 flex flex-col gap-1">
+                        <h4 class="text-xs font-bold text-white truncate">${item.title}</h4>
+                        <p class="text-[10px] text-slate-400 truncate">${item.notes || 'N/D'}</p>
+                        <div class="flex items-center justify-between mt-2 pt-2 border-t border-slate-800/60 text-[10px]">
+                            <span class="text-indigo-400 font-semibold">${item.currentEp}/${item.totalEp} ep</span>
+                            <button onclick="openEditModal(${item.id})" class="text-slate-400 hover:text-white p-1">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function setStatusFilter(status, btnElement) {
+            currentStatusFilter = status;
+            document.querySelectorAll('.filter-pill').forEach(b => {
+                b.className = "filter-pill px-4 py-2 rounded-full text-xs font-medium whitespace-nowrap bg-slate-900 text-slate-300 border border-slate-800 hover:bg-slate-800 transition";
+            });
+            if (btnElement) btnElement.className = "filter-pill px-4 py-2 rounded-full text-xs font-medium whitespace-nowrap bg-indigo-600 text-white shadow-md transition";
+            filterWatchlist();
+        }
+
+        function openAddModal() {
+            document.getElementById('modalTitle').innerText = "Aggiungi titolo";
+            document.getElementById('itemId').value = '';
+            document.getElementById('formTitle').value = '';
+            document.getElementById('formCustomImage').value = '';
+            document.getElementById('galleryStatus').innerText = "Nessun file selezionato";
+            document.getElementById('itemModal').classList.remove('hidden');
+        }
+
+        function openEditModal(id) {
+            const item = watchlist.find(i => i.id === id);
+            if (!item) return;
+            document.getElementById('modalTitle').innerText = "Modifica titolo";
+            document.getElementById('itemId').value = item.id;
+            document.getElementById('formTitle').value = item.title;
+            document.getElementById('formCustomImage').value = item.customImage || '';
+            document.getElementById('galleryStatus').innerText = item.customImage ? "Immagine personalizzata presente" : "Nessun file selezionato";
+            document.getElementById('itemModal').classList.remove('hidden');
+        }
+
+        function closeModal() { document.getElementById('itemModal').classList.add('hidden'); }
+
+        function saveItem(event) {
+            event.preventDefault();
+            const id = document.getElementById('itemId').value;
+            const title = document.getElementById('formTitle').value;
+            const type = document.getElementById('formType').value;
+            const status = document.getElementById('formStatus').value;
+            const currentEp = parseInt(document.getElementById('formCurrentEp').value) || 0;
+            const totalEp = parseInt(document.getElementById('formTotalEp').value) || 0;
+            const customImage = document.getElementById('formCustomImage').value;
+            const notes = document.getElementById('formNotes').value;
+
+            if (id) {
+                const item = watchlist.find(i => i.id == id);
+                if (item) {
+                    item.title = title; item.type = type; item.status = status;
+                    item.currentEp = currentEp; item.totalEp = totalEp;
+                    if (customImage) item.customImage = customImage;
+                    item.notes = notes;
+                }
+            } else {
+                watchlist.unshift({ id: Date.now(), title, type, status, currentEp, totalEp, customImage, notes });
+            }
+
+            closeModal();
+            filterWatchlist();
+        }
+
+        function syncData() { filterWatchlist(); }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            purgeNetlifyBadge();
+            filterWatchlist();
+        });
+    </script>
+</body>
+</html>
